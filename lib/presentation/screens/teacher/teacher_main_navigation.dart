@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../data/models/mock_data.dart';
 import '../attendance/attendance_history_screen.dart';
 import '../profile/profile_screen.dart';
 import 'teacher_home_screen.dart';
@@ -27,7 +26,7 @@ class _TeacherMainNavigationState extends State<TeacherMainNavigation> {
     final screens = [
       TeacherHomeScreen(onNavigateToClasses: () => _onTabTapped(1)),
       const AttendanceHistoryScreen(),
-      const ProfileScreen(user: MockRepository.mockTeacher),
+      const ProfileScreen(),
     ];
 
     return Scaffold(

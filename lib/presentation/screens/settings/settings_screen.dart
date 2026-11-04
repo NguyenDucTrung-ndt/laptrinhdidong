@@ -4,6 +4,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../services/auth_service.dart';
 import '../../../shared/widgets/custom_button.dart';
 
 /// Màn hình Cài đặt (Settings Screen)
@@ -142,8 +143,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.statusAbsent,
               ),
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(ctx);
+                await AuthService.instance.logout();
+                if (!mounted) return;
                 Navigator.pushNamedAndRemoveUntil(
                   context,
                   AppConstants.routeLogin,

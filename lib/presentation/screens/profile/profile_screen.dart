@@ -3,27 +3,42 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../data/models/mock_data.dart';
+import '../../../data/models/user_model.dart';
+import '../../../services/auth_service.dart';
 import '../../../shared/widgets/custom_button.dart';
 import '../../../shared/widgets/custom_text_field.dart';
 
 /// Màn hình Hồ sơ cá nhân (Profile Screen)
+/// Hiển thị thông tin thực tế từ AuthService theo vai trò Sinh viên hoặc Giảng viên
 class ProfileScreen extends StatefulWidget {
-  final UserProfile user;
+  final UserModel? user;
 
-  const ProfileScreen({super.key, this.user = MockRepository.mockStudent});
+  const ProfileScreen({super.key, this.user});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  late UserProfile _currentUser;
+  late UserModel _currentUser;
 
   @override
   void initState() {
     super.initState();
-    _currentUser = widget.user;
+    _currentUser =
+        widget.user ??
+        AuthService.instance.currentUser ??
+        UserModel(
+          id: 'temp',
+          username: '21000123',
+          fullName: 'Nguyễn Đức Trung',
+          email: 'trung.nd@sinhvien.edu.vn',
+          phone: '0987654321',
+          role: UserRole.student,
+          department: 'Khoa Công nghệ thông tin',
+          className: 'K66-CNTT-02',
+          createdAt: DateTime.now(),
+        );
   }
 
   void _showEditProfileModal() {
@@ -91,15 +106,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   text: 'Lưu thay đổi',
                   onPressed: () {
                     setState(() {
-                      _currentUser = UserProfile(
-                        id: _currentUser.id,
-                        name: _currentUser.name,
-                        code: _currentUser.code,
-                        role: _currentUser.role,
-                        email: emailController.text,
-                        phone: phoneController.text,
-                        department: _currentUser.department,
-                        className: _currentUser.className,
+                      _currentUser = _currentUser.copyWith(
+                        email: emailController.text.trim(),
+                        phone: phoneController.text.trim(),
                       );
                     });
                     Navigator.pop(ctx);
@@ -122,9 +131,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _handleLogout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xác nhận đăng xuất'),
+        content: const Text(
+          'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản hiện tại không?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.statusAbsent,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Đăng xuất'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      await AuthService.instance.logout();
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppConstants.routeLogin,
+        (route) => false,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final initial = _currentUser.fullName.isNotEmpty
+        ? _currentUser.fullName
+              .trim()
+              .split(' ')
+              .last
+              .substring(0, 1)
+              .toUpperCase()
+        : 'U';
 
     return Scaffold(
       appBar: AppBar(
@@ -166,7 +218,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     child: Center(
                       child: Text(
-                        _currentUser.name.split(' ').last.substring(0, 1),
+                        initial,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 38,
@@ -197,7 +249,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              _currentUser.name,
+              _currentUser.fullName,
               style: AppTextStyles.headingLarge.copyWith(
                 color: isDark
                     ? AppColors.darkTextPrimary
@@ -212,7 +264,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                _currentUser.role,
+                _currentUser.role.displayName,
                 style: const TextStyle(
                   color: AppColors.primary,
                   fontWeight: FontWeight.bold,
@@ -238,10 +290,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   _buildProfileTile(
                     icon: Icons.pin_outlined,
-                    label: _currentUser.role == AppConstants.roleStudent
-                        ? 'Mã số sinh viên'
+                    label: _currentUser.isStudent
+                        ? 'Mã số sinh viên (MSSV)'
                         : 'Mã số giảng viên',
-                    value: _currentUser.code,
+                    value: _currentUser.username,
                     isDark: isDark,
                   ),
                   _buildDivider(isDark),
@@ -254,7 +306,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _buildDivider(isDark),
                   _buildProfileTile(
                     icon: Icons.groups_outlined,
-                    label: _currentUser.role == AppConstants.roleStudent
+                    label: _currentUser.isStudent
                         ? 'Lớp sinh hoạt'
                         : 'Bộ môn chuyên ngành',
                     value: _currentUser.className,
@@ -288,14 +340,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Nút Cài đặt ứng dụng
+            // Nút Đăng xuất
             CustomButton(
-              text: 'Cài đặt hệ thống',
-              type: ButtonType.secondary,
-              icon: Icons.tune_rounded,
-              onPressed: () {
-                Navigator.pushNamed(context, AppConstants.routeSettings);
-              },
+              text: 'Đăng xuất tài khoản',
+              type: ButtonType.outlined,
+              customColor: AppColors.statusAbsent,
+              icon: Icons.logout_rounded,
+              onPressed: _handleLogout,
             ),
           ],
         ),

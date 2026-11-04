@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../services/auth_service.dart';
 
 /// Màn hình Splash khởi động ứng dụng
 class SplashScreen extends StatefulWidget {
@@ -46,7 +47,16 @@ class _SplashScreenState extends State<SplashScreen>
 
   void _navigateToLogin() {
     if (!mounted) return;
-    Navigator.pushReplacementNamed(context, AppConstants.routeLogin);
+    final auth = AuthService.instance;
+    if (auth.isAuthenticated) {
+      if (auth.isStudent) {
+        Navigator.pushReplacementNamed(context, AppConstants.routeStudentMain);
+      } else {
+        Navigator.pushReplacementNamed(context, AppConstants.routeTeacherMain);
+      }
+    } else {
+      Navigator.pushReplacementNamed(context, AppConstants.routeLogin);
+    }
   }
 
   @override

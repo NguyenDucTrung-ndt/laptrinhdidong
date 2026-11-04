@@ -19,4 +19,3 @@ class AppConstants {
   static const String routeSettings = '/settings';
   static const String routeAttendanceHistory = '/attendance-history';
 }
-

@@ -4,6 +4,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../data/models/mock_data.dart';
+import '../../../services/auth_service.dart';
 import '../../../shared/widgets/app_header.dart';
 import '../../../shared/widgets/custom_button.dart';
 import '../../../shared/widgets/stat_card.dart';
@@ -207,14 +208,14 @@ class TeacherHomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const teacher = MockRepository.mockTeacher;
+    final teacher = AuthService.instance.currentUser;
     final classes = MockRepository.teacherClasses;
 
     return Scaffold(
       body: Column(
         children: [
           // Header
-          const AppHeader(user: teacher),
+          AppHeader(user: teacher),
 
           // Nội dung cuộn
           Expanded(

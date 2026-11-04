@@ -4,6 +4,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../data/models/mock_data.dart';
+import '../../../services/auth_service.dart';
 import '../../../shared/widgets/app_header.dart';
 import '../../../shared/widgets/attendance_badge.dart';
 import '../../../shared/widgets/custom_button.dart';
@@ -142,7 +143,7 @@ class StudentHomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const user = MockRepository.mockStudent;
+    final user = AuthService.instance.currentUser;
     final classes = MockRepository.studentTodayClasses;
     final recentRecords = MockRepository.attendanceRecords.take(3).toList();
 
@@ -150,7 +151,7 @@ class StudentHomeScreen extends StatelessWidget {
       body: Column(
         children: [
           // Header
-          const AppHeader(user: user),
+          AppHeader(user: user),
 
           // Nội dung cuộn
           Expanded(

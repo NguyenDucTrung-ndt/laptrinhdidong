@@ -3,18 +3,42 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../data/models/mock_data.dart';
+import '../../data/models/user_model.dart';
+import '../../services/auth_service.dart';
 
 /// Header thanh điều hướng trên cùng hiển thị chào mừng, avatar và lối tắt cài đặt
 class AppHeader extends StatelessWidget {
-  final UserProfile user;
+  final UserModel? user;
   final VoidCallback? onSettingsPressed;
 
-  const AppHeader({super.key, required this.user, this.onSettingsPressed});
+  const AppHeader({super.key, this.user, this.onSettingsPressed});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final effectiveUser =
+        user ??
+        AuthService.instance.currentUser ??
+        UserModel(
+          id: 'temp',
+          username: '21000123',
+          fullName: 'Nguyễn Đức Trung',
+          email: 'trung.nd@sinhvien.edu.vn',
+          phone: '0987654321',
+          role: UserRole.student,
+          department: 'Khoa Công nghệ thông tin',
+          className: 'K66-CNTT-02',
+          createdAt: DateTime.now(),
+        );
+
+    final initial = effectiveUser.fullName.isNotEmpty
+        ? effectiveUser.fullName
+              .trim()
+              .split(' ')
+              .last
+              .substring(0, 1)
+              .toUpperCase()
+        : 'U';
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
@@ -46,7 +70,7 @@ class AppHeader extends StatelessWidget {
               ),
               child: Center(
                 child: Text(
-                  user.name.split(' ').last.substring(0, 1),
+                  initial,
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -66,7 +90,7 @@ class AppHeader extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          user.name,
+                          effectiveUser.fullName,
                           style: AppTextStyles.headingSmall.copyWith(
                             color: isDark
                                 ? AppColors.darkTextPrimary
@@ -86,7 +110,7 @@ class AppHeader extends StatelessWidget {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          user.role,
+                          effectiveUser.role.displayName,
                           style: const TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -98,7 +122,7 @@ class AppHeader extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${user.code} • ${user.className}',
+                    '${effectiveUser.username} • ${effectiveUser.className}',
                     style: AppTextStyles.bodySmall.copyWith(
                       color: isDark
                           ? AppColors.darkTextSecondary

@@ -3,12 +3,17 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/utils/validators.dart';
+import '../../../data/models/user_model.dart';
+import '../../../services/auth_service.dart';
 import '../../../shared/widgets/custom_button.dart';
 import '../../../shared/widgets/custom_text_field.dart';
 
-/// Màn hình Đăng nhập (Hỗ trợ phân quyền Sinh viên / Giảng viên)
+/// Màn hình Đăng nhập tích hợp AuthService và phân quyền theo Vai trò
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final AuthService? authService;
+
+  const LoginScreen({super.key, this.authService});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -19,15 +24,16 @@ class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  String _selectedRole = AppConstants.roleStudent;
+  late final AuthService _authService;
+  UserRole _selectedRole = UserRole.student;
   bool _rememberMe = true;
-  bool _isLoading = false;
+  String? _localError;
 
   @override
   void initState() {
     super.initState();
-    _usernameController.text = '21000123';
-    _passwordController.text = '123456';
+    _authService = widget.authService ?? AuthService.instance;
+    _fillDefaultAccount(UserRole.student);
   }
 
   @override
@@ -37,41 +43,82 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _onRoleChanged(String role) {
+  void _fillDefaultAccount(UserRole role) {
     setState(() {
       _selectedRole = role;
-      if (role == AppConstants.roleStudent) {
+      _localError = null;
+      _authService.clearError();
+      if (role == UserRole.student) {
         _usernameController.text = '21000123';
+        _passwordController.text = '123456';
       } else {
         _usernameController.text = 'GV201509';
+        _passwordController.text = '123456';
       }
     });
   }
 
-  void _handleLogin() {
+  void _simulateWrongPassword() {
+    setState(() {
+      _passwordController.text = 'sai_mat_khau_123';
+      _localError = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Đã điền mật khẩu sai để bạn thử nghiệm bắt lỗi! Nhấn Đăng nhập để xem.',
+        ),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _handleLogin() async {
+    setState(() => _localError = null);
+    _authService.clearError();
+
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
+    final success = await _authService.login(
+      username: _usernameController.text,
+      password: _passwordController.text,
+    );
 
-    // Giả lập xử lý đăng nhập 600ms để người dùng thấy tương tác phản hồi
-    Future.delayed(const Duration(milliseconds: 600), () {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+    if (!mounted) return;
 
+    if (success) {
+      final user = _authService.currentUser!;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Đăng nhập thành công với vai trò $_selectedRole!'),
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_outline, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Chào mừng ${user.fullName} (${user.role.displayName})!',
+                ),
+              ),
+            ],
+          ),
           backgroundColor: AppColors.statusPresent,
           behavior: SnackBarBehavior.floating,
         ),
       );
 
-      if (_selectedRole == AppConstants.roleStudent) {
+      // Điều hướng dựa trên vai trò (Role-based Navigation)
+      if (user.isStudent) {
         Navigator.pushReplacementNamed(context, AppConstants.routeStudentMain);
       } else {
         Navigator.pushReplacementNamed(context, AppConstants.routeTeacherMain);
       }
-    });
+    } else {
+      setState(() {
+        _localError =
+            _authService.errorMessage ?? 'Đăng nhập không thành công.';
+      });
+    }
   }
 
   @override
@@ -117,7 +164,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Hệ thống quản lý điểm danh Smart Attendance',
+                    'Hệ thống điểm danh thông minh Smart Attendance',
                     textAlign: TextAlign.center,
                     style: AppTextStyles.bodyMedium.copyWith(
                       color: isDark
@@ -125,9 +172,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           : AppColors.textSecondary,
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
 
-                  // Bộ chọn vai trò (Segmented Selector)
+                  // Thanh chọn vai trò nhanh
                   Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
@@ -140,55 +187,119 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         Expanded(
                           child: _buildRoleButton(
-                            role: AppConstants.roleStudent,
+                            role: UserRole.student,
                             icon: Icons.person_rounded,
-                            isSelected:
-                                _selectedRole == AppConstants.roleStudent,
+                            isSelected: _selectedRole == UserRole.student,
                           ),
                         ),
                         Expanded(
                           child: _buildRoleButton(
-                            role: AppConstants.roleTeacher,
+                            role: UserRole.teacher,
                             icon: Icons.badge_rounded,
-                            isSelected:
-                                _selectedRole == AppConstants.roleTeacher,
+                            isSelected: _selectedRole == UserRole.teacher,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
+
+                  // Lối tắt kiểm thử nhanh cho Giảng viên / Hội đồng
+                  Wrap(
+                    spacing: 8,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      ActionChip(
+                        avatar: const Icon(Icons.school, size: 16),
+                        label: const Text(
+                          'Mẫu Sinh viên',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        onPressed: () => _fillDefaultAccount(UserRole.student),
+                      ),
+                      ActionChip(
+                        avatar: const Icon(Icons.person_pin, size: 16),
+                        label: const Text(
+                          'Mẫu Giảng viên',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        onPressed: () => _fillDefaultAccount(UserRole.teacher),
+                      ),
+                      ActionChip(
+                        avatar: const Icon(
+                          Icons.error_outline,
+                          size: 16,
+                          color: AppColors.statusAbsent,
+                        ),
+                        label: const Text(
+                          'Thử sai pass',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.statusAbsent,
+                          ),
+                        ),
+                        onPressed: _simulateWrongPassword,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Thông báo lỗi nếu có
+                  if (_localError != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.statusAbsentBg,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppColors.statusAbsent.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.error_rounded,
+                            color: AppColors.statusAbsent,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _localError!,
+                              style: const TextStyle(
+                                color: AppColors.statusAbsent,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
 
                   // Form Fields
                   CustomTextField(
-                    label: _selectedRole == AppConstants.roleStudent
-                        ? 'Mã sinh viên'
-                        : 'Mã giảng viên',
-                    hint: _selectedRole == AppConstants.roleStudent
-                        ? 'Nhập MSSV (VD: 21000123)'
-                        : 'Nhập mã giảng viên (VD: GV201509)',
+                    label: _selectedRole == UserRole.student
+                        ? 'Mã số sinh viên (MSSV)'
+                        : 'Mã số giảng viên',
+                    hint: _selectedRole == UserRole.student
+                        ? 'VD: 21000123'
+                        : 'VD: GV201509',
                     controller: _usernameController,
                     prefixIcon: Icons.account_circle_outlined,
-                    validator: (val) {
-                      if (val == null || val.trim().isEmpty) {
-                        return 'Vui lòng nhập mã định danh';
-                      }
-                      return null;
-                    },
+                    validator: (val) =>
+                        Validators.validateCode(val, _selectedRole),
                   ),
                   const SizedBox(height: 16),
                   CustomTextField(
                     label: 'Mật khẩu',
-                    hint: 'Nhập mật khẩu',
+                    hint: 'Nhập mật khẩu (tối thiểu 6 ký tự)',
                     controller: _passwordController,
                     isPassword: true,
                     prefixIcon: Icons.lock_outline_rounded,
-                    validator: (val) {
-                      if (val == null || val.length < 6) {
-                        return 'Mật khẩu phải từ 6 ký tự trở lên';
-                      }
-                      return null;
-                    },
+                    validator: Validators.validatePassword,
                   ),
                   const SizedBox(height: 12),
 
@@ -207,14 +318,13 @@ class _LoginScreenState extends State<LoginScreen> {
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(4),
                               ),
-                              onChanged: (val) {
-                                setState(() => _rememberMe = val ?? true);
-                              },
+                              onChanged: (val) =>
+                                  setState(() => _rememberMe = val ?? true),
                             ),
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            'Ghi nhớ',
+                            'Ghi nhớ đăng nhập',
                             style: AppTextStyles.bodyMedium.copyWith(
                               color: isDark
                                   ? AppColors.darkTextSecondary
@@ -228,7 +338,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text(
-                                'Chức năng cấp lại mật khẩu qua email sinh viên/giảng viên',
+                                'Chức năng cấp lại mật khẩu qua email sinh viên/giảng viên.',
                               ),
                               behavior: SnackBarBehavior.floating,
                             ),
@@ -241,10 +351,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 20),
 
                   // Nút Đăng nhập
-                  CustomButton(
-                    text: 'Đăng nhập',
-                    isLoading: _isLoading,
-                    onPressed: _handleLogin,
+                  ListenableBuilder(
+                    listenable: _authService,
+                    builder: (context, _) {
+                      return CustomButton(
+                        text: 'Đăng nhập',
+                        isLoading: _authService.isLoading,
+                        onPressed: _handleLogin,
+                      );
+                    },
                   ),
                   const SizedBox(height: 20),
 
@@ -287,14 +402,14 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildRoleButton({
-    required String role,
+    required UserRole role,
     required IconData icon,
     required bool isSelected,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return GestureDetector(
-      onTap: () => _onRoleChanged(role),
+      onTap: () => _fillDefaultAccount(role),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 10),
@@ -323,7 +438,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             const SizedBox(width: 8),
             Text(
-              role,
+              role.displayName,
               style: AppTextStyles.labelMedium.copyWith(
                 color: isSelected ? AppColors.primary : AppColors.textTertiary,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,

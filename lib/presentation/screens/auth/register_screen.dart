@@ -3,12 +3,17 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/utils/validators.dart';
+import '../../../data/models/user_model.dart';
+import '../../../services/auth_service.dart';
 import '../../../shared/widgets/custom_button.dart';
 import '../../../shared/widgets/custom_text_field.dart';
 
-/// Màn hình Đăng ký tài khoản mới
+/// Màn hình Đăng ký tài khoản mới kết nối với AuthService
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+  final AuthService? authService;
+
+  const RegisterScreen({super.key, this.authService});
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -21,12 +26,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _codeController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _departmentController = TextEditingController(
+    text: 'Công nghệ thông tin',
+  );
   final _classController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  String _selectedRole = AppConstants.roleStudent;
-  bool _isLoading = false;
+  late final AuthService _authService;
+  UserRole _selectedRole = UserRole.student;
+  String? _localError;
+
+  @override
+  void initState() {
+    super.initState();
+    _authService = widget.authService ?? AuthService.instance;
+  }
 
   @override
   void dispose() {
@@ -34,31 +49,61 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _codeController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
+    _departmentController.dispose();
     _classController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  void _handleRegister() {
+  Future<void> _handleRegister() async {
+    setState(() => _localError = null);
+    _authService.clearError();
+
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
+    final success = await _authService.register(
+      username: _codeController.text,
+      fullName: _nameController.text,
+      email: _emailController.text,
+      phone: _phoneController.text,
+      password: _passwordController.text,
+      role: _selectedRole,
+      department: _departmentController.text,
+      className: _classController.text,
+    );
 
-    Future.delayed(const Duration(milliseconds: 700), () {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+    if (!mounted) return;
 
+    if (success) {
+      final user = _authService.currentUser!;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Đăng ký tài khoản thành công! Vui lòng đăng nhập.'),
+        SnackBar(
+          content: Text('Đăng ký thành công! Chào mừng ${user.fullName}.'),
           backgroundColor: AppColors.statusPresent,
           behavior: SnackBarBehavior.floating,
         ),
       );
 
-      Navigator.pop(context);
-    });
+      // Tự động chuyển thẳng vào Dashboard theo phân quyền
+      if (user.isStudent) {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppConstants.routeStudentMain,
+          (route) => false,
+        );
+      } else {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppConstants.routeTeacherMain,
+          (route) => false,
+        );
+      }
+    } else {
+      setState(() {
+        _localError = _authService.errorMessage ?? 'Đăng ký không thành công.';
+      });
+    }
   }
 
   @override
@@ -85,7 +130,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Chọn vai trò và điền thông tin để tham gia hệ thống',
+                  'Chọn vai trò và điền đầy đủ thông tin để tham gia hệ thống',
                   style: AppTextStyles.bodyMedium.copyWith(
                     color: isDark
                         ? AppColors.darkTextSecondary
@@ -107,20 +152,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     children: [
                       Expanded(
                         child: _buildRoleTab(
-                          title: AppConstants.roleStudent,
-                          isSelected: _selectedRole == AppConstants.roleStudent,
-                          onTap: () => setState(
-                            () => _selectedRole = AppConstants.roleStudent,
-                          ),
+                          role: UserRole.student,
+                          isSelected: _selectedRole == UserRole.student,
+                          onTap: () =>
+                              setState(() => _selectedRole = UserRole.student),
                         ),
                       ),
                       Expanded(
                         child: _buildRoleTab(
-                          title: AppConstants.roleTeacher,
-                          isSelected: _selectedRole == AppConstants.roleTeacher,
-                          onTap: () => setState(
-                            () => _selectedRole = AppConstants.roleTeacher,
-                          ),
+                          role: UserRole.teacher,
+                          isSelected: _selectedRole == UserRole.teacher,
+                          onTap: () =>
+                              setState(() => _selectedRole = UserRole.teacher),
                         ),
                       ),
                     ],
@@ -128,79 +171,114 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 20),
 
+                // Báo lỗi nếu có
+                if (_localError != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.statusAbsentBg,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppColors.statusAbsent.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline_rounded,
+                          color: AppColors.statusAbsent,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _localError!,
+                            style: const TextStyle(
+                              color: AppColors.statusAbsent,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 // Họ và tên
                 CustomTextField(
                   label: 'Họ và tên',
                   hint: 'Nguyễn Văn A',
                   controller: _nameController,
                   prefixIcon: Icons.badge_outlined,
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Vui lòng nhập họ tên'
-                      : null,
+                  validator: (v) => Validators.validateRequired(v, 'Họ và tên'),
                 ),
                 const SizedBox(height: 14),
 
                 // Mã định danh
                 CustomTextField(
-                  label: _selectedRole == AppConstants.roleStudent
+                  label: _selectedRole == UserRole.student
                       ? 'Mã số sinh viên (MSSV)'
                       : 'Mã số giảng viên',
-                  hint: _selectedRole == AppConstants.roleStudent
-                      ? '21000123'
-                      : 'GV201509',
+                  hint: _selectedRole == UserRole.student
+                      ? 'VD: 21000999'
+                      : 'VD: GV202601',
                   controller: _codeController,
                   prefixIcon: Icons.pin_outlined,
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Vui lòng nhập mã'
-                      : null,
+                  validator: (v) => Validators.validateCode(v, _selectedRole),
                 ),
                 const SizedBox(height: 14),
 
-                // Lớp / Bộ môn
+                // Khoa / Viện
                 CustomTextField(
-                  label: _selectedRole == AppConstants.roleStudent
+                  label: 'Khoa / Viện đào tạo',
+                  hint: 'VD: Công nghệ thông tin',
+                  controller: _departmentController,
+                  prefixIcon: Icons.account_balance_outlined,
+                  validator: (v) =>
+                      Validators.validateRequired(v, 'Khoa / Viện'),
+                ),
+                const SizedBox(height: 14),
+
+                // Lớp sinh hoạt / Bộ môn
+                CustomTextField(
+                  label: _selectedRole == UserRole.student
                       ? 'Lớp sinh hoạt'
-                      : 'Bộ môn / Khoa',
-                  hint: _selectedRole == AppConstants.roleStudent
-                      ? 'K66-CNTT-02'
-                      : 'Khoa Công nghệ thông tin',
+                      : 'Bộ môn trực thuộc',
+                  hint: _selectedRole == UserRole.student
+                      ? 'VD: K66-CNTT-01'
+                      : 'VD: Bộ môn Hệ thống thông tin',
                   controller: _classController,
-                  prefixIcon: Icons.domain_outlined,
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Vui lòng nhập thông tin này'
-                      : null,
+                  prefixIcon: Icons.groups_outlined,
+                  validator: (v) => Validators.validateRequired(
+                    v,
+                    _selectedRole == UserRole.student
+                        ? 'Lớp sinh hoạt'
+                        : 'Bộ môn',
+                  ),
                 ),
                 const SizedBox(height: 14),
 
                 // Email
                 CustomTextField(
                   label: 'Email trường cấp',
-                  hint: 'example@edu.vn',
+                  hint: 'example@sinhvien.edu.vn',
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   prefixIcon: Icons.email_outlined,
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return 'Vui lòng nhập email';
-                    }
-                    if (!v.contains('@')) {
-                      return 'Email không hợp lệ';
-                    }
-                    return null;
-                  },
+                  validator: Validators.validateEmail,
                 ),
                 const SizedBox(height: 14),
 
                 // Số điện thoại
                 CustomTextField(
                   label: 'Số điện thoại',
-                  hint: '0987 654 321',
+                  hint: '0987654321',
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
                   prefixIcon: Icons.phone_outlined,
-                  validator: (v) => (v == null || v.trim().length < 9)
-                      ? 'Vui lòng nhập SĐT hợp lệ'
-                      : null,
+                  validator: Validators.validatePhone,
                 ),
                 const SizedBox(height: 14),
 
@@ -211,33 +289,34 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _passwordController,
                   isPassword: true,
                   prefixIcon: Icons.lock_outline,
-                  validator: (v) => (v == null || v.length < 6)
-                      ? 'Mật khẩu tối thiểu 6 ký tự'
-                      : null,
+                  validator: Validators.validatePassword,
                 ),
                 const SizedBox(height: 14),
 
                 // Xác nhận mật khẩu
                 CustomTextField(
                   label: 'Xác nhận mật khẩu',
-                  hint: 'Nhập lại mật khẩu',
+                  hint: 'Nhập lại mật khẩu vừa nhập',
                   controller: _confirmPasswordController,
                   isPassword: true,
                   prefixIcon: Icons.lock_reset_outlined,
-                  validator: (v) {
-                    if (v != _passwordController.text) {
-                      return 'Mật khẩu xác nhận không khớp';
-                    }
-                    return null;
-                  },
+                  validator: (v) => Validators.validateConfirmPassword(
+                    v,
+                    _passwordController.text,
+                  ),
                 ),
                 const SizedBox(height: 24),
 
                 // Nút Đăng ký
-                CustomButton(
-                  text: 'Hoàn tất đăng ký',
-                  isLoading: _isLoading,
-                  onPressed: _handleRegister,
+                ListenableBuilder(
+                  listenable: _authService,
+                  builder: (context, _) {
+                    return CustomButton(
+                      text: 'Hoàn tất đăng ký',
+                      isLoading: _authService.isLoading,
+                      onPressed: _handleRegister,
+                    );
+                  },
                 ),
                 const SizedBox(height: 16),
 
@@ -258,7 +337,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Widget _buildRoleTab({
-    required String title,
+    required UserRole role,
     required bool isSelected,
     required VoidCallback onTap,
   }) {
@@ -286,7 +365,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         child: Center(
           child: Text(
-            title,
+            role.displayName,
             style: AppTextStyles.labelMedium.copyWith(
               color: isSelected ? AppColors.primary : AppColors.textTertiary,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
